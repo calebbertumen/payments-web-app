@@ -5,26 +5,43 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useState } from "react"
-
-const mockTransactions = [
-  { id: "1", company: "Store Name", amount: 0.0, date: "1/1/26" },
-  { id: "2", company: "Store Name", amount: 0.0, date: "1/1/26" },
-  { id: "3", company: "Store Name", amount: 0.0, date: "1/1/26" },
-  { id: "4", company: "Store Name", amount: 0.0, date: "1/1/26" },
-  { id: "5", company: "Store Name", amount: 0.0, date: "1/1/26" },
-  { id: "6", company: "Store Name", amount: 0.0, date: "1/1/26" },
-]
+import { useTransactions } from "@/hooks/use-transactions"
+import { format } from "date-fns"
 
 export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [page, setPage] = useState(1)
+  const { data, isLoading, error } = useTransactions(page, 20, searchQuery)
 
-  // Filter transactions based on search query (company name or date)
-  const filteredTransactions = mockTransactions.filter((transaction) => {
+  // Filter transactions based on search query (client-side for instant feedback)
+  const filteredTransactions = data?.transactions.filter((transaction) => {
     const query = searchQuery.toLowerCase().trim()
     if (!query) return true
 
-    return transaction.company.toLowerCase().includes(query) || transaction.date.includes(query)
-  })
+    return (
+      transaction.company.toLowerCase().includes(query) ||
+      transaction.date.includes(query) ||
+      transaction.category?.toLowerCase().includes(query)
+    )
+  }) || []
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="text-center text-gray-600">Loading transactions...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="text-center text-red-600">
+          Error loading transactions. Please try again.
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
@@ -37,7 +54,10 @@ export default function HistoryPage() {
             placeholder="Search Payments"
             className="pl-10 pr-12 py-6 text-base bg-white border-gray-300"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setPage(1) // Reset to first page on new search
+            }}
           />
           <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2">
             <SlidersHorizontal className="h-5 w-5 text-gray-600" />
@@ -71,12 +91,12 @@ export default function HistoryPage() {
                   </td>
                   <td className="px-6 py-4">
                     <Link href={`/history/${transaction.id}`} className="block">
-                      ${transaction.amount.toFixed(2)}
+                      ${Math.abs(transaction.amount).toFixed(2)}
                     </Link>
                   </td>
                   <td className="px-6 py-4">
                     <Link href={`/history/${transaction.id}`} className="block">
-                      {transaction.date}
+                      {format(new Date(transaction.date), "M/d/yy")}
                     </Link>
                   </td>
                 </tr>
@@ -84,13 +104,38 @@ export default function HistoryPage() {
             ) : (
               <tr>
                 <td colSpan={3} className="px-6 py-12 text-center text-gray-500">
-                  No payments found matching "{searchQuery}"
+                  {searchQuery
+                    ? `No payments found matching "${searchQuery}"`
+                    : "No transactions yet. Link a payment method to get started."}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {data && data.pagination.totalPages > 1 && (
+        <div className="mt-6 flex justify-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+          >
+            Previous
+          </Button>
+          <span className="flex items-center px-4 text-sm text-gray-600">
+            Page {page} of {data.pagination.totalPages}
+          </span>
+          <Button
+            variant="outline"
+            onClick={() => setPage((p) => Math.min(data.pagination.totalPages, p + 1))}
+            disabled={page === data.pagination.totalPages}
+          >
+            Next
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

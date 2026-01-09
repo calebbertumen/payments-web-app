@@ -1,0 +1,207 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Auth.js (NextAuth) required models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // App-specific relations
+  paymentMethods PaymentMethod[]
+  transactions   Transaction[]
+  qrCode         QrCode?
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Plaid Integration Models
+model PlaidItem {
+  id                    String   @id @default(cuid())
+  accessToken           String   @db.Text // Encrypted in production
+  itemId                String   @unique // Plaid item_id
+  institutionId         String?
+  institutionName       String?
+  userId                String
+  error                 Json?    // Store Plaid errors
+  lastSuccessfulUpdate  DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  paymentMethods PaymentMethod[]
+
+  @@index([userId])
+  @@index([itemId])
+}
+
+model PaymentMethod {
+  id                String   @id @default(cuid())
+  userId            String
+  plaidItemId       String?  // Nullable for future manual additions
+  plaidAccountId    String?  // Plaid account_id (unique per account)
+  type              String   // "depository", "credit", "loan", etc.
+  subtype           String?  // "checking", "savings", "credit card", etc.
+  name              String   // User-friendly name (e.g., "Chase Checking")
+  mask              String?  // Last 4 digits (e.g., "0000")
+  officialName      String?  // Official account name from Plaid
+  institutionName   String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plaidItem    PlaidItem?   @relation(fields: [plaidItemId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([plaidAccountId])
+  @@index([userId])
+  @@index([plaidItemId])
+}
+
+// Merchant normalization (optional, for better analytics)
+model Merchant {
+  id          String   @id @default(cuid())
+  name        String
+  category    String?  // Merchant category code or custom category
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@index([name])
+}
+
+// Core Transaction Model
+model Transaction {
+  id                String   @id @default(cuid())
+  userId            String
+  paymentMethodId   String?  // Nullable for cash transactions
+  merchantId        String?  // Nullable, can link to Merchant table
+  source            String   // "PLAID" | "CASH_QR"
+  amount            Decimal  @db.Decimal(10, 2) // Positive for credits, negative for debits
+  currency          String   @default("USD")
+  date              DateTime // Transaction date
+  merchantName      String   // Store merchant name directly for easy querying
+  category          String?  // Transaction category
+  categoryDetailed  String?  // Detailed category if available
+  notes             String?  @db.Text
+  plaidTransactionId String? @unique // Plaid transaction_id for idempotency
+  location          Json?    // Store location data from Plaid (city, lat/lon, etc.)
+  authorizedDate    DateTime? // When transaction was authorized
+  postedDate        DateTime? // When transaction was posted
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  merchant     Merchant?     @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  // Cash transaction tracking
+  cashTransaction CashTransaction?
+
+  @@index([userId, date(sort: Desc)]) // Optimized for history queries
+  @@index([paymentMethodId])
+  @@index([merchantId])
+  @@index([plaidTransactionId])
+  @@index([source])
+  @@index([date])
+}
+
+// Cash Transaction via QR Code
+model CashTransaction {
+  id                String   @id @default(cuid())
+  transactionId     String   @unique
+  qrCodeId          String   // Which QR code was scanned
+  shopName          String?  // Shop that submitted the transaction
+  shopIdentifier    String?  // Shop ID or identifier
+  submittedAt       DateTime @default(now())
+  submissionToken   String?  // Token used for submission (for validation)
+  metadata          Json?    // Additional metadata from shop
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  qrCode      QrCode      @relation(fields: [qrCodeId], references: [id], onDelete: Cascade)
+
+  @@index([qrCodeId])
+  @@index([submittedAt])
+}
+
+// User QR Code for cash transactions
+model QrCode {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  token           String   @unique // Secure token embedded in QR
+  isActive        Boolean  @default(true)
+  lastUsedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cashTransactions CashTransaction[]
+
+  @@index([token])
+}
+
+// For future P2P features (schema only, not implemented)
+// model P2PTransaction {
+//   id          String   @id @default(cuid())
+//   fromUserId  String
+//   toUserId    String
+//   amount      Decimal  @db.Decimal(10, 2)
+//   status      String   // "pending", "completed", "failed"
+//   createdAt   DateTime @default(now())
+//   // ... other fields
+// }
+
+

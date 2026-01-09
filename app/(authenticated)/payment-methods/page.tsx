@@ -1,9 +1,14 @@
 "use client"
 
-import { MoreVertical, Plus } from "lucide-react"
+import { MoreVertical, Plus, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { useState } from "react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useState, useCallback, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -13,302 +18,198 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-type PaymentMethod = {
-  id: string
-  type: string
-  details: string
-  cardNumber?: string
-  bankName?: string
-  accountNumber?: string
-}
-
-const mockPaymentMethods: PaymentMethod[] = [
-  {
-    id: "1",
-    type: "Credit Card",
-    details: "Visa xxxx 0123",
-    cardNumber: "1234567890120123",
-  },
-  {
-    id: "2",
-    type: "Bank Account",
-    details: "Chase Checking xxxx0123",
-    bankName: "Chase",
-    accountNumber: "123456780123",
-  },
-]
+import { usePaymentMethods, useDeletePaymentMethod } from "@/hooks/use-payment-methods"
+import { useCreateLinkToken, useExchangePublicToken, useSyncTransactions } from "@/hooks/use-plaid"
+import { usePlaidLink } from "react-plaid-link"
+import { toast } from "sonner"
 
 export default function PaymentMethodsPage() {
-  const [paymentMethods, setPaymentMethods] = useState(mockPaymentMethods)
-  const [open, setOpen] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
-  const [paymentType, setPaymentType] = useState<string>("")
-  const [cardNumber, setCardNumber] = useState("")
-  const [accountNumber, setAccountNumber] = useState("")
-  const [bankName, setBankName] = useState("")
+  const { data, isLoading, error } = usePaymentMethods()
+  const deleteMutation = useDeletePaymentMethod()
+  const createLinkToken = useCreateLinkToken()
+  const exchangeToken = useExchangePublicToken()
+  const syncTransactions = useSyncTransactions()
+  const [linkToken, setLinkToken] = useState<string | null>(null)
 
-  const handleDelete = (id: string) => {
-    setPaymentMethods(paymentMethods.filter((method) => method.id !== id))
-  }
+  const paymentMethods = data?.paymentMethods || []
 
-  const handleEdit = (id: string) => {
-    const method = paymentMethods.find((m) => m.id === id)
-    if (method) {
-      setSelectedMethod(method)
-      setCardNumber(method.cardNumber || "")
-      setAccountNumber(method.accountNumber || "")
-      setBankName(method.bankName || "")
-      setEditOpen(true)
-    }
-  }
-
-  const handleSaveEdit = () => {
-    if (!selectedMethod) return
-
-    const isValid =
-      selectedMethod.type === "Credit Card"
-        ? cardNumber && cardNumber.length >= 13
-        : bankName && accountNumber && accountNumber.length >= 4
-
-    if (!isValid) return
-
-    const updatedMethods = paymentMethods.map((method) => {
-      if (method.id === selectedMethod.id) {
-        if (selectedMethod.type === "Credit Card") {
-          return {
-            ...method,
-            cardNumber,
-            details: `Visa xxxx ${cardNumber.slice(-4)}`,
-          }
-        } else {
-          return {
-            ...method,
-            bankName,
-            accountNumber,
-            details: `${bankName} Checking xxxx${accountNumber.slice(-4)}`,
-          }
+  const onSuccess = useCallback(
+    async (publicToken: string, metadata: any) => {
+      try {
+        toast.loading("Connecting your account...", { id: "plaid-connect" })
+        
+        const result = await exchangeToken.mutateAsync(publicToken)
+        
+        toast.success("Account connected successfully!", { id: "plaid-connect" })
+        
+        // Reset link token for next use
+        setLinkToken(null)
+        
+        // Automatically sync transactions after connecting
+        if (result.itemId) {
+          toast.loading("Syncing transactions...", { id: "plaid-sync" })
+          await syncTransactions.mutateAsync(result.itemId)
+          toast.success("Transactions synced!", { id: "plaid-sync" })
         }
+      } catch (error) {
+        toast.error("Failed to connect account. Please try again.", { id: "plaid-connect" })
+        console.error("Plaid connection error:", error)
+        setLinkToken(null)
       }
-      return method
-    })
+    },
+    [exchangeToken, syncTransactions]
+  )
 
-    setPaymentMethods(updatedMethods)
-    setEditOpen(false)
-    setSelectedMethod(null)
-    setCardNumber("")
-    setAccountNumber("")
-    setBankName("")
+  const { open: openPlaidLink, ready } = usePlaidLink({
+    token: linkToken,
+    onSuccess,
+    onExit: (err, metadata) => {
+      if (err) {
+        toast.error("Connection cancelled or failed")
+      }
+      setLinkToken(null)
+    },
+  })
+
+  // Auto-open Plaid Link when token is set and ready
+  useEffect(() => {
+    if (linkToken && ready) {
+      toast.dismiss("plaid-prepare")
+      openPlaidLink()
+    }
+  }, [linkToken, ready, openPlaidLink])
+
+  const handleAddPaymentMethod = async () => {
+    try {
+      toast.loading("Preparing connection...", { id: "plaid-prepare" })
+      const token = await createLinkToken.mutateAsync()
+      setLinkToken(token)
+      // Plaid Link will open automatically via useEffect when ready
+    } catch (error: any) {
+      toast.error(
+        error?.message || "Failed to initialize Plaid. Please check your credentials.",
+        { id: "plaid-prepare" }
+      )
+      console.error("Error creating link token:", error)
+      setLinkToken(null)
+    }
   }
 
-  const handleCancelEdit = () => {
-    setEditOpen(false)
-    setSelectedMethod(null)
-    setCardNumber("")
-    setAccountNumber("")
-    setBankName("")
+  const handleDelete = async (id: string) => {
+    if (confirm("Are you sure you want to delete this payment method?")) {
+      try {
+        await deleteMutation.mutateAsync(id)
+        toast.success("Payment method deleted")
+      } catch (error) {
+        toast.error("Failed to delete payment method")
+      }
+    }
   }
 
-  const handleAddPaymentMethod = () => {
-    if (!paymentType) return
-
-    const newMethod: PaymentMethod = {
-      id: String(paymentMethods.length + 1),
-      type: paymentType === "credit" ? "Credit Card" : "Bank Account",
-      details:
-        paymentType === "credit"
-          ? `Visa xxxx ${cardNumber.slice(-4)}`
-          : `${bankName} Checking xxxx${accountNumber.slice(-4)}`,
-      ...(paymentType === "credit" ? { cardNumber } : { bankName, accountNumber }),
+  const handleSync = async (plaidItemId: string | null | undefined) => {
+    if (!plaidItemId) {
+      toast.error("This payment method cannot be synced")
+      return
     }
 
-    setPaymentMethods([...paymentMethods, newMethod])
-    setOpen(false)
-    setPaymentType("")
-    setCardNumber("")
-    setAccountNumber("")
-    setBankName("")
+    try {
+      toast.loading("Syncing transactions...", { id: "sync-transactions" })
+      await syncTransactions.mutateAsync(plaidItemId)
+      toast.success("Transactions synced successfully!", { id: "sync-transactions" })
+    } catch (error) {
+      toast.error("Failed to sync transactions. Please try again.", { id: "sync-transactions" })
+      console.error("Sync error:", error)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        <div className="text-center text-gray-600">Loading payment methods...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        <div className="text-center text-red-600">
+          Error loading payment methods. Please try again.
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8">
       <div className="flex items-center justify-end mb-6">
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-[#6B46C1] hover:bg-[#5a3aa0] text-white">
-              <Plus className="h-5 w-5 mr-2" />
-              Add Payment Method
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>Add Payment Method</DialogTitle>
-              <DialogDescription>Add a new credit card or bank account to your payment methods.</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="payment-type">Payment Type</Label>
-                <Select value={paymentType} onValueChange={setPaymentType}>
-                  <SelectTrigger id="payment-type">
-                    <SelectValue placeholder="Select payment type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="credit">Credit Card</SelectItem>
-                    <SelectItem value="bank">Bank Account</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {paymentType === "credit" && (
-                <div className="grid gap-2">
-                  <Label htmlFor="card-number">Card Number</Label>
-                  <Input
-                    id="card-number"
-                    placeholder="1234 5678 9012 3456"
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
-                    maxLength={16}
-                  />
-                </div>
-              )}
-
-              {paymentType === "bank" && (
-                <>
-                  <div className="grid gap-2">
-                    <Label htmlFor="bank-name">Bank Name</Label>
-                    <Input
-                      id="bank-name"
-                      placeholder="Chase, Bank of America, etc."
-                      value={bankName}
-                      onChange={(e) => setBankName(e.target.value)}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="account-number">Account Number</Label>
-                    <Input
-                      id="account-number"
-                      placeholder="1234567890"
-                      value={accountNumber}
-                      onChange={(e) => setAccountNumber(e.target.value)}
-                      maxLength={12}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleAddPaymentMethod}
-                disabled={
-                  !paymentType ||
-                  (paymentType === "credit" && !cardNumber) ||
-                  (paymentType === "bank" && (!bankName || !accountNumber))
-                }
-                className="bg-[#6B46C1] hover:bg-[#5a3aa0] text-white"
-              >
-                Add Payment Method
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button
+          onClick={handleAddPaymentMethod}
+          disabled={createLinkToken.isPending}
+          className="bg-[#6B46C1] hover:bg-[#5a3aa0] text-white disabled:opacity-50"
+        >
+          <Plus className="h-5 w-5 mr-2" />
+          {createLinkToken.isPending ? "Loading..." : "Add Payment Method"}
+        </Button>
       </div>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Edit Payment Method</DialogTitle>
-            <DialogDescription>Update your {selectedMethod?.type.toLowerCase()} information.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            {selectedMethod?.type === "Credit Card" ? (
-              <div className="grid gap-2">
-                <Label htmlFor="edit-card-number">Card Number</Label>
-                <Input
-                  id="edit-card-number"
-                  placeholder="1234 5678 9012 3456"
-                  value={cardNumber}
-                  onChange={(e) => setCardNumber(e.target.value)}
-                  maxLength={16}
-                />
-              </div>
-            ) : (
-              <>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-bank-name">Bank Name</Label>
-                  <Input
-                    id="edit-bank-name"
-                    placeholder="Chase, Bank of America, etc."
-                    value={bankName}
-                    onChange={(e) => setBankName(e.target.value)}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-account-number">Account Number</Label>
-                  <Input
-                    id="edit-account-number"
-                    placeholder="1234567890"
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
-                    maxLength={12}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCancelEdit}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveEdit}
-              disabled={
-                selectedMethod?.type === "Credit Card"
-                  ? !cardNumber || cardNumber.length < 13
-                  : !bankName || !accountNumber || accountNumber.length < 4
-              }
-              className="bg-[#6B46C1] hover:bg-[#5a3aa0] text-white"
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <div className="space-y-4">
-        {paymentMethods.map((method) => (
-          <div
-            key={method.id}
-            className="bg-white border border-gray-300 rounded-lg p-6 flex items-center justify-between"
-          >
-            <div>
-              <h3 className="font-semibold text-lg mb-1">{method.type}</h3>
-              <p className="text-gray-600">{method.details}</p>
+        {paymentMethods.length > 0 ? (
+          paymentMethods.map((method) => (
+            <div
+              key={method.id}
+              className="bg-white border border-gray-300 rounded-lg p-6 flex items-center justify-between"
+            >
+              <div>
+                <h3 className="font-semibold text-lg mb-1">{method.type}</h3>
+                <p className="text-gray-600">{method.details}</p>
+                {method.bankName && (
+                  <p className="text-sm text-gray-500 mt-1">{method.bankName}</p>
+                )}
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <MoreVertical className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {method.plaidItemId && (
+                    <DropdownMenuItem
+                      onClick={() => handleSync(method.plaidItemId)}
+                      disabled={syncTransactions.isPending}
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      {syncTransactions.isPending ? "Syncing..." : "Sync Transactions"}
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem
+                    onClick={() => handleDelete(method.id)}
+                    className="text-destructive focus:text-destructive"
+                    disabled={deleteMutation.isPending}
+                  >
+                    {deleteMutation.isPending ? "Deleting..." : "Delete payment method"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleEdit(method.id)}>Edit payment method</DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleDelete(method.id)}
-                  className="text-destructive focus:text-destructive"
-                >
-                  Delete payment method
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          ))
+        ) : (
+          <div className="bg-white border border-gray-300 rounded-lg p-12 text-center">
+            <p className="text-gray-600 mb-4">No payment methods yet.</p>
+            <p className="text-sm text-gray-500 mb-6">
+              Connect your bank account or credit card to start tracking transactions.
+            </p>
+            <Button
+              onClick={handleAddPaymentMethod}
+              disabled={createLinkToken.isPending}
+              className="bg-[#6B46C1] hover:bg-[#5a3aa0] text-white disabled:opacity-50"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              {createLinkToken.isPending ? "Loading..." : "Connect Account"}
+            </Button>
           </div>
-        ))}
+        )}
       </div>
     </div>
   )
