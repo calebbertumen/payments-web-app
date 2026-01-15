@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { ArrowLeft, Store } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -11,6 +12,7 @@ export default function PaymentDetailsPage() {
   const params = useParams()
   const id = params.id as string
   const { data: transaction, isLoading, error } = useTransaction(id)
+  const [logoError, setLogoError] = useState(false)
 
   if (isLoading) {
     return (
@@ -25,7 +27,7 @@ export default function PaymentDetailsPage() {
       <div className="max-w-5xl mx-auto px-6 py-8">
         <Link href="/history">
           <Button variant="ghost" size="icon" className="mb-6 h-12 w-12">
-            <ArrowLeft className="h-6 w-6 text-purple-700" />
+            <ArrowLeft className="h-6 w-6 text-[#9D00FF]" />
           </Button>
         </Link>
         <div className="text-center text-red-600">
@@ -39,9 +41,9 @@ export default function PaymentDetailsPage() {
     <div className="max-w-5xl mx-auto px-6 py-8">
       {/* Back Button */}
       <Link href="/history">
-        <Button variant="ghost" size="icon" className="mb-6 h-12 w-12">
-          <ArrowLeft className="h-6 w-6 text-purple-700" />
-        </Button>
+          <Button variant="ghost" size="icon" className="mb-6 h-12 w-12">
+            <ArrowLeft className="h-6 w-6 text-[#9D00FF]" />
+          </Button>
       </Link>
 
       {/* Transaction Details Card */}
@@ -50,19 +52,28 @@ export default function PaymentDetailsPage() {
         <div className="flex items-start justify-between mb-8">
           <div className="flex flex-col items-center gap-4">
             <h2 className="text-2xl font-bold">{transaction.storeName}</h2>
-            <Store className="h-24 w-24" strokeWidth={1.5} />
+            {transaction.storeLogoUrl && !logoError ? (
+              <div className="relative h-24 w-24 flex items-center justify-center bg-white rounded-lg border border-gray-200 p-2">
+                <img
+                  src={transaction.storeLogoUrl}
+                  alt={transaction.storeName}
+                  className="object-contain max-h-full max-w-full"
+                  onError={() => setLogoError(true)}
+                />
+              </div>
+            ) : (
+              <Store className="h-24 w-24 text-gray-400" strokeWidth={1.5} />
+            )}
           </div>
           <div className="space-y-3 text-right">
             <div>
               <span className="font-semibold">Date: </span>
               <span>{format(new Date(transaction.date), "M/d/yy")}</span>
             </div>
-            {transaction.location && transaction.location !== "N/A" && (
-              <div>
-                <span className="font-semibold">Location: </span>
-                <span>{transaction.location}</span>
-              </div>
-            )}
+            <div>
+              <span className="font-semibold">Location: </span>
+              <span>{transaction.location || "N/A"}</span>
+            </div>
             <div>
               <span className="font-semibold">Transaction #: </span>
               <span>{transaction.transactionNumber}</span>
@@ -90,7 +101,7 @@ export default function PaymentDetailsPage() {
         <div className="border border-gray-300 rounded-lg overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="bg-purple-700 text-white">
+              <tr className="bg-[#9D00FF] text-white">
                 <th className="text-left px-6 py-3 font-semibold">QTY</th>
                 <th className="text-left px-6 py-3 font-semibold">ITEM</th>
                 <th className="text-right px-6 py-3 font-semibold">PRICE</th>

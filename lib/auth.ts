@@ -28,9 +28,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return session
     },
     redirect: async ({ url, baseUrl }) => {
-      // If redirecting to login page, go to history instead
+      // If redirecting to login page, go to home instead
       if (url.includes("/login")) {
-        return `${baseUrl}/history`
+        return `${baseUrl}/home`
       }
       // Handle relative URLs
       if (url.startsWith("/")) {
@@ -41,7 +41,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return url
       }
       // Default redirect after login
-      return `${baseUrl}/history`
+      return `${baseUrl}/home`
     },
   },
   pages: {

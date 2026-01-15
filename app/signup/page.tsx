@@ -8,7 +8,7 @@ import { useState } from "react"
 
 export default function SignUpPage() {
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get("callbackUrl") || "/history"
+  const callbackUrl = searchParams.get("callbackUrl") || "/home"
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,7 +28,7 @@ export default function SignUpPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="bg-purple-700 text-white px-6 py-4">
+      <header className="bg-[#9D00FF] text-white px-6 py-4">
         <div className="max-w-7xl mx-auto">
           <Link href="/">
             <h1 className="text-2xl font-bold italic">Payments</h1>
@@ -50,14 +50,14 @@ export default function SignUpPage() {
           <Button
             onClick={handleGoogleSignIn}
             disabled={isLoading}
-            className="w-full bg-purple-700 hover:bg-purple-800 text-white"
+            className="w-full bg-[#9D00FF] hover:bg-[#7A00CC] text-white"
           >
             {isLoading ? "Signing up..." : "Sign up with Google"}
           </Button>
 
           <div className="text-center text-sm text-gray-500">
             Already have an account?{" "}
-            <Link href="/login" className="text-purple-700 hover:underline">
+            <Link href="/login" className="text-[#9D00FF] hover:underline">
               Log in
             </Link>
           </div>

@@ -19,7 +19,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
-export default function ProfilePage() {
+export default function PersonalInfoPage() {
   const { data: session, update } = useSession()
   const [isEditing, setIsEditing] = useState(false)
   const [isUpdatingImage, setIsUpdatingImage] = useState(false)
@@ -29,13 +29,6 @@ export default function ProfilePage() {
     firstName: "John",
     lastName: "Doe",
     phone: "(555) 123-4567",
-    email: "john.doe@example.com",
-    streetAddress: "123 Main St",
-    addressLine2: "Apt 4B",
-    city: "New York",
-    state: "NY",
-    country: "United States",
-    zipCode: "10001",
     imageUrl: "",
   })
   const [originalData, setOriginalData] = useState({ ...formData })
@@ -47,16 +40,10 @@ export default function ProfilePage() {
         ...prev,
         firstName: nameParts[0] || "",
         lastName: nameParts.slice(1).join(" ") || "",
-        email: session.user.email || "",
         imageUrl: session.user.image || "",
       }))
     }
   }, [session])
-
-  const handleEdit = () => {
-    setOriginalData({ ...formData })
-    setIsEditing(true)
-  }
 
   // Get first initial + last initial
   const getNameInitials = (name: string): string => {
@@ -70,8 +57,15 @@ export default function ProfilePage() {
     ? getNameInitials(session.user.name)
     : "U"
 
+  const handleEdit = () => {
+    setOriginalData({ ...formData })
+    setIsEditing(true)
+  }
+
   const handleSave = () => {
     setIsEditing(false)
+    // TODO: Save to API
+    toast.success("Personal information updated successfully")
   }
 
   const handleCancel = () => {
@@ -135,7 +129,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
+    <div className="max-w-4xl space-y-8">
       <div className="space-y-8">
         <h2 className="text-2xl font-bold">Personal Information</h2>
 
@@ -206,118 +200,17 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium mb-2">Phone #</label>
-              {isEditing ? (
-                <Input
-                  value={formData.phone}
-                  onChange={(e) => handleChange("phone", e.target.value)}
-                  className="h-12"
-                />
-              ) : (
-                <div className="bg-gray-200 rounded-md h-12 flex items-center px-4">{formData.phone}</div>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Email</label>
-              {isEditing ? (
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleChange("email", e.target.value)}
-                  className="h-12"
-                />
-              ) : (
-                <div className="bg-gray-200 rounded-md h-12 flex items-center px-4">{formData.email}</div>
-              )}
-            </div>
-          </div>
-
-          <div className="pt-4">
-            <h3 className="text-xl font-bold mb-6">Address</h3>
-            <div className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Street Address</label>
-                  {isEditing ? (
-                    <Input
-                      value={formData.streetAddress}
-                      onChange={(e) => handleChange("streetAddress", e.target.value)}
-                      className="h-12"
-                    />
-                  ) : (
-                    <div className="bg-gray-200 rounded-md h-12 flex items-center px-4">{formData.streetAddress}</div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Address Line 2</label>
-                  {isEditing ? (
-                    <Input
-                      value={formData.addressLine2}
-                      onChange={(e) => handleChange("addressLine2", e.target.value)}
-                      className="h-12"
-                    />
-                  ) : (
-                    <div className="bg-gray-200 rounded-md h-12 flex items-center px-4">{formData.addressLine2}</div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium mb-2">City</label>
-                  {isEditing ? (
-                    <Input
-                      value={formData.city}
-                      onChange={(e) => handleChange("city", e.target.value)}
-                      className="h-12"
-                    />
-                  ) : (
-                    <div className="bg-gray-200 rounded-md h-12 flex items-center px-4">{formData.city}</div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">State</label>
-                  {isEditing ? (
-                    <Input
-                      value={formData.state}
-                      onChange={(e) => handleChange("state", e.target.value)}
-                      className="h-12"
-                    />
-                  ) : (
-                    <div className="bg-gray-200 rounded-md h-12 flex items-center px-4">{formData.state}</div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Country</label>
-                  {isEditing ? (
-                    <Input
-                      value={formData.country}
-                      onChange={(e) => handleChange("country", e.target.value)}
-                      className="h-12"
-                    />
-                  ) : (
-                    <div className="bg-gray-200 rounded-md h-12 flex items-center px-4">{formData.country}</div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Zip Code/Postal Code</label>
-                  {isEditing ? (
-                    <Input
-                      value={formData.zipCode}
-                      onChange={(e) => handleChange("zipCode", e.target.value)}
-                      className="h-12"
-                    />
-                  ) : (
-                    <div className="bg-gray-200 rounded-md h-12 flex items-center px-4">{formData.zipCode}</div>
-                  )}
-                </div>
-              </div>
-            </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Phone #</label>
+            {isEditing ? (
+              <Input
+                value={formData.phone}
+                onChange={(e) => handleChange("phone", e.target.value)}
+                className="h-12"
+              />
+            ) : (
+              <div className="bg-gray-200 rounded-md h-12 flex items-center px-4">{formData.phone}</div>
+            )}
           </div>
         </div>
 
@@ -368,3 +261,4 @@ export default function ProfilePage() {
     </div>
   )
 }
+

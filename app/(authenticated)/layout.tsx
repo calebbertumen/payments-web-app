@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useSession, signOut } from "next-auth/react"
 import { useEffect, useState } from "react"
+import { useUnreadNotificationCount } from "@/hooks/use-notifications"
 
 export default function AuthenticatedLayout({
   children,
@@ -25,12 +26,19 @@ export default function AuthenticatedLayout({
   const router = useRouter()
   const { data: session, status } = useSession()
   const [isClient, setIsClient] = useState(false)
+  const { data: unreadData } = useUnreadNotificationCount()
+  const unreadCount = unreadData?.unreadCount || 0
 
   useEffect(() => {
     setIsClient(true)
   }, [])
 
-  const isActive = (path: string) => pathname.startsWith(path)
+  const isActive = (path: string) => {
+    if (path === "/home") {
+      return pathname === "/home"
+    }
+    return pathname.startsWith(path)
+  }
 
   const handleSignOut = async () => {
     await signOut({ callbackUrl: "/login" })
@@ -40,7 +48,7 @@ export default function AuthenticatedLayout({
   if (!isClient) {
     return (
       <div className="min-h-screen flex flex-col">
-        <header className="bg-purple-700 text-white px-6 py-4">
+        <header className="bg-[#9D00FF] text-white px-6 py-4">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <h1 className="text-2xl font-bold italic">Payments</h1>
           </div>
@@ -56,7 +64,7 @@ export default function AuthenticatedLayout({
   if (status === "unauthenticated" && !session) {
     return (
       <div className="min-h-screen flex flex-col">
-        <header className="bg-purple-700 text-white px-6 py-4">
+        <header className="bg-[#9D00FF] text-white px-6 py-4">
           <div className="max-w-7xl mx-auto">
             <h1 className="text-2xl font-bold italic">Payments</h1>
           </div>
@@ -73,53 +81,71 @@ export default function AuthenticatedLayout({
   const displayEmail = session?.user?.email || ""
   const displayImage = session?.user?.image || undefined
 
-  const userInitials = displayName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2) || "U"
+  // Get first initial + last initial
+  const getNameInitials = (name: string): string => {
+    const parts = name.trim().split(" ").filter(Boolean)
+    if (parts.length === 0) return "U"
+    if (parts.length === 1) return parts[0][0].toUpperCase()
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  }
+  
+  const userInitials = getNameInitials(displayName)
 
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="bg-purple-700 text-white px-6 py-4">
+      <header className="bg-[#9D00FF] text-white px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <h1 className="text-2xl font-bold italic">Payments</h1>
+          <Link href="/home">
+            <h1 className="text-2xl font-bold italic cursor-pointer hover:text-gray-200 transition-colors">
+              Payments
+            </h1>
+          </Link>
           <div className="flex items-center gap-8">
             <Link
               href="/history"
-              className={`text-lg font-medium hover:text-gray-200 transition-colors ${
-                isActive("/history") ? "text-white" : "text-white/90"
+              className={`text-lg font-medium hover:text-gray-200 transition-colors relative pb-1 ${
+                isActive("/history")
+                  ? "text-white border-b-2 border-white"
+                  : "text-white/90"
               }`}
             >
               History
             </Link>
             <Link
               href="/payment-methods"
-              className={`text-lg font-medium hover:text-gray-200 transition-colors ${
-                isActive("/payment-methods") ? "text-white" : "text-white/90"
+              className={`text-lg font-medium hover:text-gray-200 transition-colors relative pb-1 ${
+                isActive("/payment-methods")
+                  ? "text-white border-b-2 border-white"
+                  : "text-white/90"
               }`}
             >
               Payment Methods
             </Link>
             <Link
               href="/send-request"
-              className={`text-lg font-medium hover:text-gray-200 transition-colors ${
-                isActive("/send-request") ? "text-white" : "text-white/90"
+              className={`text-lg font-medium hover:text-gray-200 transition-colors relative pb-1 ${
+                isActive("/send-request")
+                  ? "text-white border-b-2 border-white"
+                  : "text-white/90"
               }`}
             >
               Send/Request
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-purple-700 rounded-full">
+                <button className="focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[#9D00FF] rounded-full relative">
                   <Avatar className="h-10 w-10 border-2 border-white cursor-pointer">
                     <AvatarImage src={displayImage} alt={displayName} />
-                    <AvatarFallback className="bg-white text-purple-700">
+                    <AvatarFallback className="bg-[#9D00FF] text-white">
                       {userInitials}
                     </AvatarFallback>
                   </Avatar>
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold border-2 border-white">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
@@ -129,13 +155,13 @@ export default function AuthenticatedLayout({
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/profile" className="cursor-pointer">
-                    Personal Information
+                  <Link href="/account/personal-info" className="cursor-pointer">
+                    Account
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/profile/notifications" className="cursor-pointer">
-                    Notification Settings
+                  <Link href="/notifications" className="cursor-pointer">
+                    Notifications
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
@@ -156,6 +182,23 @@ export default function AuthenticatedLayout({
 
       {/* Main Content */}
       <main className="flex-1 bg-gray-50">{children}</main>
+
+      {/* Footer */}
+      <footer className="bg-[#9D00FF] text-white px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-center gap-6">
+          <Link href="/privacy-policy" className="hover:text-gray-200 transition-colors">
+            Privacy Policy
+          </Link>
+          <span>|</span>
+          <Link href="/terms-of-service" className="hover:text-gray-200 transition-colors">
+            Terms of Service
+          </Link>
+          <span>|</span>
+          <Link href="/contact-us" className="hover:text-gray-200 transition-colors">
+            Contact Us
+          </Link>
+        </div>
+      </footer>
     </div>
   )
 }

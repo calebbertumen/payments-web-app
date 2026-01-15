@@ -12,7 +12,7 @@ export default async function LoginPage({
   // If already logged in, redirect immediately (server-side)
   // Note: redirect() throws a NEXT_REDIRECT error which is expected behavior
   if (session) {
-    const callbackUrl = searchParams?.callbackUrl || "/history"
+    const callbackUrl = searchParams?.callbackUrl || "/home"
     redirect(callbackUrl)
   }
 

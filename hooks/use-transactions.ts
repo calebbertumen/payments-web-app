@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, keepPreviousData } from "@tanstack/react-query"
 
 export interface Transaction {
   id: string
@@ -8,6 +8,12 @@ export interface Transaction {
   merchantName: string
   category?: string | null
   paymentMethod: string
+  paymentMethodDetails?: {
+    type: string
+    subtype: string | null
+    mask: string | null
+    display: string
+  } | null
   source: string
 }
 
@@ -36,6 +42,8 @@ export function useTransactions(page = 1, limit = 20, search = "") {
       if (!res.ok) throw new Error("Failed to fetch transactions")
       return res.json()
     },
+    placeholderData: keepPreviousData, // Keep previous data while loading new data for smoother UX
+    staleTime: 30000, // Consider data fresh for 30 seconds
   })
 }
 

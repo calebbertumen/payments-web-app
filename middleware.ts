@@ -30,9 +30,9 @@ export default function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // If logged in and trying to access login/signup, redirect to history
-  if (isLoggedIn && (pathname === "/login" || pathname === "/signup")) {
-    return NextResponse.redirect(new URL("/history", req.url))
+  // If logged in and trying to access login/signup or landing page, redirect to home
+  if (isLoggedIn && (pathname === "/login" || pathname === "/signup" || pathname === "/")) {
+    return NextResponse.redirect(new URL("/home", req.url))
   }
 
   return NextResponse.next()

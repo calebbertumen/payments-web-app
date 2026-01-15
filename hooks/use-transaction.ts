@@ -16,6 +16,7 @@ export interface TransactionDetail {
   notes?: string | null
   source: string
   shopName?: string | null
+  storeLogoUrl?: string | null
 }
 
 export function useTransaction(id: string) {

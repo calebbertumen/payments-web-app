@@ -49,7 +49,13 @@ export function useSyncTransactions() {
         body: JSON.stringify({ itemId }),
       })
       if (!res.ok) {
-        const error = await res.json()
+        let error: any
+        try {
+          error = await res.json()
+        } catch (e) {
+          // If response is not JSON (e.g., HTML error page), use status text
+          throw new Error(`Failed to sync transactions: ${res.statusText || res.status}`)
+        }
         throw new Error(error.error || "Failed to sync transactions")
       }
       return res.json()
